@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>체질 리포트 입력 시스템</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 700px; margin: auto; }
+    h1, h2 { text-align: center; }
+    .section { margin-bottom: 25px; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    select, input[type="range"] { width: 100%; }
+    .output { margin-top: 20px; font-weight: bold; padding: 10px; background: #f9f9f9; border-radius: 10px; }
+    button { padding: 10px 20px; margin-top: 20px; font-size: 16px; display: block; margin-left: auto; margin-right: auto; }
+    canvas { margin-top: 30px; }
+  </style>
+</head>
+<body>
+  <h1>일일 건강 상태 입력</h1>
+  <form id="healthForm">
+    <div class="section">
+      <label>대변 빈도 (0~3회)</label>
+      <input type="range" name="bowel_freq" min="0" max="3" value="1">
+    </div>
+    <div class="section">
+      <label>대변 시원함 정도 (1~5)</label>
+      <input type="range" name="bowel_satisfaction" min="1" max="5" value="3">
+    </div>
+    <div class="section">
+      <label>소변 빈도 (회/일)</label>
+      <input type="range" name="urine_freq" min="1" max="10" value="5">
+    </div>
+    <div class="section">
+      <label>소변 색상 (1: 맑음 ~ 5: 진함)</label>
+      <input type="range" name="urine_color" min="1" max="5" value="3">
+    </div>
+    <div class="section">
+      <label>수면 시간 (시간)</label>
+      <input type="range" name="sleep_time" min="0" max="12" value="6">
+    </div>
+    <div class="section">
+      <label>수면의 질 (1~5)</label>
+      <input type="range" name="sleep_quality" min="1" max="5" value="3">
+    </div>
+    <div class="section">
+      <label>식사량 (1~5)</label>
+      <input type="range" name="meal_amount" min="1" max="5" value="3">
+    </div>
+    <div class="section">
+      <label>식후 불편감 (1: 없음 ~ 5: 매우 심함)</label>
+      <input type="range" name="digest_discomfort" min="1" max="5" value="2">
+    </div>
+    <div class="section">
+      <label>감정 상태 (1: 매우 불안 ~ 5: 매우 안정)</label>
+      <input type="range" name="emotion" min="1" max="5" value="3">
+    </div>
+    <button type="button" onclick="generateReport()">리포트 생성</button>
+  </form>
+
+  <div id="report" class="output"></div>
+  <canvas id="scoreChart" width="600" height="300"></canvas>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDQktulHF-Wk1AS1Hc7GicY2jYzD9_c5eE",
+      authDomain: "haneui-daily.firebaseapp.com",
+      projectId: "haneui-daily",
+      storageBucket: "haneui-daily.firebasestorage.app",
+      messagingSenderId: "668831060042",
+      appId: "1:668831060042:web:ca3d33a40b8d4fa5ad56b3",
+      measurementId: "G-NKV0622PWV"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    function generateReport() {
+      const form = document.forms["healthForm"];
+      const scores = {
+        기체: 0,
+        혈허: 0,
+        음허: 0,
+        식적: 0,
+        간기울결: 0
+      };
+
+      const data = {
+        bowel_freq: parseInt(form["bowel_freq"].value),
+        bowel_satisfaction: parseInt(form["bowel_satisfaction"].value),
+        urine_freq: parseInt(form["urine_freq"].value),
+        urine_color: parseInt(form["urine_color"].value),
+        sleep_time: parseInt(form["sleep_time"].value),
+        sleep_quality: parseInt(form["sleep_quality"].value),
+        meal_amount: parseInt(form["meal_amount"].value),
+        digest_discomfort: parseInt(form["digest_discomfort"].value),
+        emotion: parseInt(form["emotion"].value),
+        timestamp: new Date()
+      };
+
+      if (data.bowel_freq < 1 || data.bowel_satisfaction < 3) scores["기체"] += 2;
+      if (data.digest_discomfort >= 4) scores["식적"] += 2;
+      if (data.urine_color >= 4) scores["음허"] += 2;
+      if (data.sleep_time < 5 || data.sleep_quality <= 2) scores["혈허"] += 2;
+      if (data.emotion <= 2) scores["간기울결"] += 2;
+
+      db.collection("daily_reports").add({
+        ...data,
+        scores
+      }).then(() => console.log("데이터 저장 완료"))
+        .catch((err) => console.error("저장 오류:", err));
+
+      let result = "<h2>오늘의 체질 상태</h2><ul>";
+      for (let key in scores) {
+        result += `<li><strong>${key}</strong> 점수: ${scores[key]}점</li>`;
+      }
+      result += "</ul><h3>추천 생활 가이드</h3><ul>";
+      if (scores["기체"] >= 2) result += "<li>규칙적인 식사, 가벼운 유산소 운동 추천</li>";
+      if (scores["혈허"] >= 2) result += "<li>충분한 수면과 철분이 풍부한 음식 섭취</li>";
+      if (scores["음허"] >= 2) result += "<li>밤늦은 시간 활동 자제, 수분 섭취 증가</li>";
+      if (scores["식적"] >= 2) result += "<li>소식, 가공식품 피하기</li>";
+      if (scores["간기울결"] >= 2) result += "<li>명상, 산책 등 스트레스 완화 활동 필요</li>";
+      result += "</ul>";
+      document.getElementById("report").innerHTML = result;
+
+      const ctx = document.getElementById("scoreChart").getContext("2d");
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(scores),
+          datasets: [{
+            label: '체질 점수',
+            data: Object.values(scores),
+            backgroundColor: 'rgba(75, 192, 192, 0.6)'
+          }]
+        },
+        options: {
+          scales: {
+            y: { beginAtZero: true, max: 5 }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
